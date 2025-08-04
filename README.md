@@ -1,1 +1,1 @@
-# find-foods
+# foods-finder
