@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>3公里內美食搜尋</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 20px; }
+    #map { height: 400px; width: 100%; margin-top: 20px; }
+    select, input, button { margin: 5px; padding: 5px; }
+  </style>
+</head>
+<body>
+
+  <h1>附近3公里內的餐廳搜尋</h1>
+
+  <label for="rating">評價星數：</label>
+  <select id="rating">
+    <option value="4">4星以上</option>
+    <option value="4.5">4.5星以上</option>
+    <option value="5">5星</option>
+  </select>
+
+  <br>
+
+  <label for="name">餐廳名稱查詢：</label>
+  <input type="text" id="name" placeholder="輸入餐廳名稱">
+
+  <br>
+
+  <button onclick="searchNearby()">搜尋</button>
+  <button onclick="searchRandom()">隨機推薦</button>
+  <button onclick="getCurrentLocation()">📍定位我</button>
+
+  <div id="map"></div>
+
+  <script>
+    let map;
+    let service;
+    let infowindow;
+    let currentLocation;
+    let markers = [];
+
+    function initMap() {
+      // 先以台北101為預設
+      currentLocation = new google.maps.LatLng(25.033964, 121.564468);
+
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: currentLocation,
+        zoom: 15
+      });
+
+      infowindow = new google.maps.InfoWindow();
+
+      // 預設取得使用者位置
+      getCurrentLocation();
+    }
+
+    function getCurrentLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(position => {
+          currentLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+          map.setCenter(currentLocation);
+
+          // 在地圖上放一個 marker 表示「你的位置」
+          clearMarkers();
+          const userMarker = new google.maps.Marker({
+            map: map,
+            position: currentLocation,
+            icon: {
+              url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+            }
+          });
+          markers.push(userMarker);
+        }, () => {
+          alert('無法取得你的定位，請確認有開啟定位權限');
+        });
+      } else {
+        alert('你的瀏覽器不支援定位功能');
+      }
+    }
+
+    function searchNearby() {
+      const rating = parseFloat(document.getElementById('rating').value);
+      const name = document.getElementById('name').value;
+
+      const request = {
+        location: currentLocation,
+        radius: 3000,
+        type: ['restaurant'],
+        keyword: name || undefined
+      };
+
+      service = new google.maps.places.PlacesService(map);
+      service.nearbySearch(request, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          map.setCenter(currentLocation);
+          clearMarkers();
+          let found = 0;
+          for (let i = 0; i < results.length; i++) {
+            if (results[i].rating >= rating) {
+              createMarker(results[i]);
+              found++;
+            }
+          }
+          if (found === 0) {
+            alert('找不到符合條件的餐廳');
+          }
+        }
+      });
+    }
+
+    function searchRandom() {
+      const rating = parseFloat(document.getElementById('rating').value);
+
+      const request = {
+        location: currentLocation,
+        radius: 3000,
+        type: ['restaurant']
+      };
+
+      service = new google.maps.places.PlacesService(map);
+      service.nearbySearch(request, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          const filtered = results.filter(r => r.rating >= rating);
+          if (filtered.length === 0) {
+            alert('找不到符合條件的餐廳');
+            return;
+          }
+          const randomPlace = filtered[Math.floor(Math.random() * filtered.length)];
+          map.setCenter(randomPlace.geometry.location);
+          clearMarkers();
+          createMarker(randomPlace);
+
+          // 顯示餐廳名字 + 評價 + 食物類型
+          let types = randomPlace.types.filter(t => t !== "restaurant" && t !== "food" && t !== "point_of_interest" && t !== "establishment");
+          let typeText = types.length > 0 ? "｜類型: " + types.join(", ") : "";
+
+          infowindow.setContent(randomPlace.name + "<br>評價: " + randomPlace.rating + "<br>" + typeText);
+          infowindow.open(map);
+        }
+      });
+    }
+
+    function createMarker(place) {
+      const marker = new google.maps.Marker({
+        map: map,
+        position: place.geometry.location
+      });
+      google.maps.event.addListener(marker, 'click', () => {
+        let types = place.types.filter(t => t !== "restaurant" && t !== "food" && t !== "point_of_interest" && t !== "establishment");
+        let typeText = types.length > 0 ? "｜類型: " + types.join(", ") : "";
+        infowindow.setContent(place.name + "<br>評價: " + place.rating + "<br>" + typeText);
+        infowindow.open(map, marker);
+      });
+      markers.push(marker);
+    }
+
+    function clearMarkers() {
+      for (let i = 0; i < markers.length; i++) {
+        markers[i].setMap(null);
+      }
+      markers = [];
+    }
+  </script>
+
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD7JiHggis66nCLaEszgv4Np_YVL4t9qVI_KEY&libraries=places&callback=initMap">
+  </script>
+
+</body>
+</html>
