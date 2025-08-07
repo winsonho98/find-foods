@@ -42,73 +42,64 @@
 
   <script>
     let map, service, userPos;
-
+  
     function initMap() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((position) => {
-          userPos = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-
-          map = new google.maps.Map(document.getElementById('map'), {
-            center: userPos,
-            zoom: 15
-          });
-
-          new google.maps.Marker({
-            position: userPos,
-            map,
-            label: 'your location'
-          });
+      navigator.geolocation.getCurrentPosition(pos => {
+        userPos = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        };
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: userPos,
+          zoom: 15
         });
-      } else {
-        alert("Unable to obtain location");
-      }
+        new google.maps.Marker({ position: userPos, map, label: "你的位置" });
+        service = new google.maps.places.PlacesService(map);
+      });
     }
-
-    function searchNearby() {
-      const ratingFilter = parseFloat(document.getElementById("rating").value);
-      const keyword = document.getElementById("keyword").value;
-
+  
+    function searchPlaces(keyword = null) {
+      const rating = parseFloat(document.getElementById("rating").value);
+      const userKeyword = keyword || document.getElementById("keyword").value.trim();
       const request = {
         location: userPos,
         radius: 3000,
-        keyword: keyword || undefined,
-        type: 'restaurant'
+        type: ["restaurant"]
       };
-
-      service = new google.maps.places.PlacesService(map);
+      if (userKeyword) request.keyword = userKeyword;
+  
       service.nearbySearch(request, (results, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK) {
-          displayResults(results.filter(r => r.rating >= ratingFilter));
+          const filtered = results.filter(place => place.rating >= rating);
+          displayResults(filtered);
         }
       });
     }
-
+  
     function searchRandom() {
-      const request = {
-        location: userPos,
-        radius: 3000,
-        type: 'restaurant'
-      };
-
-      service = new google.maps.places.PlacesService(map);
-      service.nearbySearch(request, (results, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK) {
-          const filtered = results.filter(r => r.rating >= 3);
-          const random = filtered[Math.floor(Math.random() * filtered.length)];
-          displayResults([random]);
-        }
-      });
+      const foods = ["拉麵", "火鍋", "壽司", "牛排", "早午餐", "燒烤", "炸雞", "咖哩", "披薩"];
+      const randomFood = foods[Math.floor(Math.random() * foods.length)];
+      document.getElementById("keyword").value = randomFood;
+      searchPlaces(randomFood);
     }
-
+  
     function displayResults(places) {
-      const list = document.getElementById("results");
-      list.innerHTML = "";
+      document.getElementById("results").innerHTML = "";
       places.forEach(place => {
-        new google.maps.Marker({ map, position: place.geometry.location });
         const li = document.createElement("li");
         li.className = "list-group-item";
-        li.textContent = `${place.name} (${place.rating}⭐)`;
-        list.appendChild(li);
+        li.innerHTML = `
+          <strong>${place.name}</strong><br>
+          評價：${place.rating || "N/A"} ⭐<br>
+          <a href="https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${place.geometry.location.lat()},${place.geometry.location.lng()}&travelmode=driving" target="_blank">🚗 導航</a>
+        `;
+        document.getElementById("results").appendChild(li);
+  
+        new google.maps.Marker({
+          position: place.geometry.location,
+          map,
+          title: place.name
+        });
       });
     }
   </script>
