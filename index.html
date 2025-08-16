@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Find Some Foods</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
     #map { height: 400px; width: 100%; }
     @media (max-width: 576px) {
@@ -42,7 +43,7 @@
 
   <script>
     let map, service, userPos;
-  
+
     function initMap() {
       navigator.geolocation.getCurrentPosition(pos => {
         userPos = {
@@ -53,11 +54,11 @@
           center: userPos,
           zoom: 15
         });
-        new google.maps.Marker({ position: userPos, map, label: "你的位置" });
+        new google.maps.Marker({ position: userPos, map, label: "You" });
         service = new google.maps.places.PlacesService(map);
       });
     }
-  
+
     function searchPlaces(keyword = null) {
       const rating = parseFloat(document.getElementById("rating").value);
       const userKeyword = keyword || document.getElementById("keyword").value.trim();
@@ -67,22 +68,64 @@
         type: ["restaurant"]
       };
       if (userKeyword) request.keyword = userKeyword;
-  
+
       service.nearbySearch(request, (results, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK) {
-          const filtered = results.filter(place => place.rating >= rating);
+          const filtered = results.filter(place => !place.rating || place.rating >= rating);
           displayResults(filtered);
         }
       });
     }
-  
-    function searchRandom() {
-      const foods = ["拉麵", "火鍋", "壽司", "牛排", "早午餐", "燒烤", "炸雞", "咖哩", "披薩"];
-      const randomFood = foods[Math.floor(Math.random() * foods.length)];
-      document.getElementById("keyword").value = randomFood;
-      searchPlaces(randomFood);
+
+    function searchNearby() {
+      searchPlaces();
     }
-  
+
+    function searchRandom() {
+      const rating = parseFloat(document.getElementById("rating").value);
+      const request = {
+        location: userPos,
+        radius: 3000,
+        type: ["restaurant"]
+      };
+
+      service.nearbySearch(request, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          // Allow restaurants without ratings
+          let filtered = results.filter(place => !place.rating || place.rating >= rating);
+
+          // If none matched, fallback to all results
+          if (filtered.length === 0) {
+            filtered = results;
+          }
+
+          if (filtered.length === 0) {
+            Swal.fire("😢 No restaurants found nearby!");
+            return;
+          }
+
+          // Pick a random one
+          const randomIndex = Math.floor(Math.random() * filtered.length);
+          const randomPlace = filtered[randomIndex];
+
+          // Show only this one in the list
+          displayResults([randomPlace]);
+
+          // Popup with SweetAlert2
+          Swal.fire({
+            title: "🎉 Let's eat here!",
+            html: `
+              <b>${randomPlace.name}</b><br>
+              Rating: ${randomPlace.rating || "N/A"} ⭐<br>
+              <a href="https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${randomPlace.geometry.location.lat()},${randomPlace.geometry.location.lng()}&travelmode=driving" target="_blank">🚗 Get Directions</a>
+            `,
+            icon: "success",
+            confirmButtonText: "Yummy 🍴"
+          });
+        }
+      });
+    }
+
     function displayResults(places) {
       document.getElementById("results").innerHTML = "";
       places.forEach(place => {
@@ -90,11 +133,11 @@
         li.className = "list-group-item";
         li.innerHTML = `
           <strong>${place.name}</strong><br>
-          評價：${place.rating || "N/A"} ⭐<br>
-          <a href="https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${place.geometry.location.lat()},${place.geometry.location.lng()}&travelmode=driving" target="_blank">🚗 導航</a>
+          Rating: ${place.rating || "N/A"} ⭐<br>
+          <a href="https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${place.geometry.location.lat()},${place.geometry.location.lng()}&travelmode=driving" target="_blank">🚗 Get Directions</a>
         `;
         document.getElementById("results").appendChild(li);
-  
+
         new google.maps.Marker({
           position: place.geometry.location,
           map,
