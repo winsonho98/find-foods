@@ -45,14 +45,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
-    let map, userPos, placeLibrary;
+    let map, userPos, service;
 
-    async function initMap() {
-      const { Map } = await google.maps.importLibrary("maps");
-      const { Place } = await google.maps.importLibrary("places");
-
-      placeLibrary = Place;
-
+    function initMap() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -61,7 +56,7 @@
               lng: pos.coords.longitude
             };
 
-            map = new Map(document.getElementById("map"), {
+            map = new google.maps.Map(document.getElementById("map"), {
               center: userPos,
               zoom: 15
             });
@@ -71,86 +66,91 @@
               map: map,
               label: "You"
             });
+
+            // 初始化 PlacesService
+            service = new google.maps.places.PlacesService(map);
           },
-          () => {
-            alert("Failed to get your location");
-          }
+          () => { alert("Failed to get your location"); }
         );
       } else {
         alert("Geolocation is not supported by your browser");
       }
     }
 
-    async function searchPlaces() {
+    function searchPlaces() {
       const rating = parseFloat(document.getElementById("rating").value);
+
       const request = {
-        location: userPos,
+        location: new google.maps.LatLng(userPos.lat, userPos.lng), // 修正
         radius: 3000,
         type: ["restaurant"]
       };
 
-      try {
-        const results = await placeLibrary.searchNearby(request);
-        const filtered = results.filter(place => place.rating >= rating);
+      service.nearbySearch(request, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          const filtered = results.filter(place => place.rating >= rating);
 
-        if (filtered.length === 0) {
-          Swal.fire("No restaurants found nearby!", "Try lowering the rating filter.", "warning");
-          return;
+          if (filtered.length === 0) {
+            Swal.fire("No restaurants found nearby!", "Try lowering the rating filter.", "warning");
+            return;
+          }
+
+          displayResults(filtered);
+        } else {
+          console.error("Error searching restaurants:", status);
+          Swal.fire("Search failed", "Please try again later.", "error");
         }
-
-        displayResults(filtered);
-
-      } catch (error) {
-        console.error("Error searching restaurants:", error);
-        Swal.fire("Search failed", "Please try again later.", "error");
-      }
+      });
     }
 
-    async function searchRandom() {
+    function searchRandom() {
       const rating = parseFloat(document.getElementById("rating").value);
+
       const request = {
-        location: userPos,
+        location: new google.maps.LatLng(userPos.lat, userPos.lng),
         radius: 3000,
         type: ["restaurant"]
       };
 
-      try {
-        const results = await placeLibrary.searchNearby(request);
-        const filtered = results.filter(place => place.rating >= rating);
+      service.nearbySearch(request, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          const filtered = results.filter(place => place.rating >= rating);
 
-        if (filtered.length === 0) {
-          Swal.fire("No restaurants match your criteria!", "Try lowering the rating filter.", "warning");
-          return;
-        }
-
-        const randomIndex = Math.floor(Math.random() * filtered.length);
-        const randomPlace = filtered[randomIndex];
-        displayResults([randomPlace]);
-
-        // SweetAlert with Navigate option
-        Swal.fire({
-          title: "Today's Pick 🎉",
-          html: `<b>${randomPlace.name}</b><br>⭐ Rating: ${randomPlace.rating || "N/A"}<br>📍 ${randomPlace.vicinity || ""}`,
-          icon: "success",
-          showCancelButton: true,
-          confirmButtonText: "Navigate",
-          cancelButtonText: "Cancel"
-        }).then((result) => {
-          if (result.isConfirmed) {
-            const url = `https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${randomPlace.geometry.location.lat()},${randomPlace.geometry.location.lng()}&travelmode=driving`;
-            window.open(url, "_blank");
+          if (filtered.length === 0) {
+            Swal.fire("No restaurants match your criteria!", "Try lowering the rating filter.", "warning");
+            return;
           }
-        });
 
-      } catch (error) {
-        console.error("Error picking random restaurant:", error);
-        Swal.fire("Recommendation failed", "Please try again later.", "error");
-      }
+          const randomIndex = Math.floor(Math.random() * filtered.length);
+          const randomPlace = filtered[randomIndex];
+          displayResults([randomPlace]);
+
+          Swal.fire({
+            title: "Today's Pick 🎉",
+            html: `<b>${randomPlace.name}</b><br>⭐ Rating: ${randomPlace.rating || "N/A"}<br>📍 ${randomPlace.vicinity || ""}`,
+            icon: "success",
+            showCancelButton: true,
+            confirmButtonText: "Navigate",
+            cancelButtonText: "Cancel"
+          }).then((result) => {
+            if (result.isConfirmed) {
+              const url = `https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${randomPlace.geometry.location.lat()},${randomPlace.geometry.location.lng()}&travelmode=driving`;
+              window.open(url, "_blank");
+            }
+          });
+
+        } else {
+          console.error("Error picking random restaurant:", status);
+          Swal.fire("Recommendation failed", "Please try again later.", "error");
+        }
+      });
     }
 
     function displayResults(places) {
       const resultsDiv = document.getElementById("results");
       resultsDiv.innerHTML = "";
+
+      const bounds = new google.maps.LatLngBounds();
 
       places.forEach((place) => {
         const div = document.createElement("div");
@@ -164,8 +164,10 @@
           title: place.name
         });
 
-        map.setCenter(place.geometry.location);
+        bounds.extend(place.geometry.location);
       });
+
+      map.fitBounds(bounds);
     }
   </script>
 
